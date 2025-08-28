@@ -5,7 +5,7 @@ import './docanalysismodal.css';
 
 const { Panel } = Collapse;
 
-const DocImportAnalysisModal = ({ visible, onClose, onAnalysis, loading, analysisResult, reasoningContent, isReasoningDone, isFetchingFullNavigation, fullNavigationNodeCount }) => {
+const DocImportAnalysisModal = ({ visible, onClose, onAnalysis, loading, analysisResult, reasoningContent, isReasoningDone, isFetchingFullNavigation, fullNavigationNodeCount, isBatchProcessing, batchProgress, batchResults, currentBatchIndex, finalSummary, onExportToCloud }) => {
   const [docUrl, setDocUrl] = useState('');
   const reasoningRef = useRef(null);
 
@@ -64,11 +64,48 @@ const DocImportAnalysisModal = ({ visible, onClose, onAnalysis, loading, analysi
           <div style={{ marginTop: '20px' }}>
             <div>正在获取全量导航数据</div>
             {fullNavigationNodeCount > 0 && (
-              <div style={{ marginTop: '10px', color: '#666' }}>
+              <div style={{ marginTop: '10px', color: 'rgba(255, 255, 255, 0.65)' }}>
                 已获取节点数量: {fullNavigationNodeCount}
               </div>
             )}
           </div>
+        </div>
+      );
+    }
+    
+    // 如果正在分批处理，显示分批处理进度
+    if (isBatchProcessing) {
+      return (
+        <div style={{ textAlign: 'center', padding: '50px' }}>
+          <Spin size="large" />
+          <div style={{ marginTop: '20px' }}>
+            <div>正在分批分析超大型知识库</div>
+            {batchProgress > 0 && (
+              <div style={{ marginTop: '10px', color: 'rgba(255, 255, 255, 0.65)' }}>
+                处理进度: {batchProgress}%
+              </div>
+            )}
+            {currentBatchIndex > 0 && (
+              <div style={{ marginTop: '10px', color: 'rgba(255, 255, 255, 0.65)' }}>
+                当前批次: {currentBatchIndex}
+              </div>
+            )}
+          </div>
+          {batchResults && batchResults.length > 0 && (
+            <div style={{ marginTop: '20px', textAlign: 'left' }}>
+              <div style={{ fontWeight: 'bold', marginBottom: '10px', color: '#e8e6e3' }}>已完成批次分析结果:</div>
+              <div style={{ maxHeight: '200px', overflowY: 'auto', marginTop: '10px' }}>
+                {batchResults.map((result, index) => (
+                  <div key={index} className="batch-result-card" style={{ marginBottom: '10px', padding: '10px', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '4px' }}>
+                    <div style={{ fontWeight: 'bold', color: '#e8e6e3' }}>批次 {index + 1}:</div>
+                    <div style={{ marginTop: '5px' }}>
+                      <ReactMarkdown>{result}</ReactMarkdown>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       );
     }
@@ -98,6 +135,12 @@ const DocImportAnalysisModal = ({ visible, onClose, onAnalysis, loading, analysi
             </Panel>
           </Collapse>
         )}
+        {finalSummary && (
+          <div className="analysis-result" style={{ marginBottom: '20px' }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '10px', color: '#e8e6e3' }}>最终总结分析:</div>
+            <ReactMarkdown>{finalSummary}</ReactMarkdown>
+          </div>
+        )}
         {analysisResult && (
           <div className="analysis-result">
             <ReactMarkdown>{analysisResult}</ReactMarkdown>
@@ -110,12 +153,34 @@ const DocImportAnalysisModal = ({ visible, onClose, onAnalysis, loading, analysi
     );
   };
 
+  // 判断是否显示导出按钮
+  const shouldShowExportButton = !loading && !isBatchProcessing && (analysisResult || finalSummary) && onExportToCloud;
+  
+  // 渲染模态窗底部按钮
+  const renderFooter = () => {
+    if (shouldShowExportButton) {
+      return [
+        <Button 
+          key="export" 
+          type="primary"
+          onClick={onExportToCloud}
+          disabled={loading}
+        >
+          导出到云文档
+        </Button>
+      ];
+    }
+    
+    // 默认情况下不显示任何按钮
+    return null;
+  };
+
   return (
     <Modal
       title="文档导入 AI 评估"
       visible={visible}
       onCancel={onClose}
-      footer={null}
+      footer={renderFooter()}
       width={800}
       className="doc-analysis-modal"
     >
@@ -128,11 +193,11 @@ const DocImportAnalysisModal = ({ visible, onClose, onAnalysis, loading, analysi
         />
         <Button 
           className="gradient-purple-btn"
-          loading={loading || isFetchingFullNavigation} 
+          loading={loading || isFetchingFullNavigation || isBatchProcessing} 
           onClick={handleOk}
-          disabled={isFetchingFullNavigation}
+          disabled={isFetchingFullNavigation || isBatchProcessing}
         >
-          {isFetchingFullNavigation ? '获取全量导航中...' : '开始评估'}
+          {isFetchingFullNavigation ? '获取全量导航中...' : isBatchProcessing ? '分批处理中...' : '开始评估'}
         </Button>
       </div>
       {renderContent()}

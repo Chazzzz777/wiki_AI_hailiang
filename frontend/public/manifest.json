@@ -1,0 +1,20 @@
+{
+  "short_name": "AI知识官",
+  "name": "AI 知识官 - 智能知识管理平台",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "favicon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#3370FF",
+  "background_color": "#ffffff"
+}

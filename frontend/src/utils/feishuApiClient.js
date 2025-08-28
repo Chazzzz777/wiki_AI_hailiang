@@ -1,9 +1,10 @@
 import axios from 'axios';
 
 // 创建飞书 API 客户端实例
+// 所有飞书API请求都应该通过后端代理，而不是直接调用飞书API
 const feishuApiClient = axios.create({
-  // 飞书 API 的基础 URL
-  baseURL: 'https://open.feishu.cn/open-apis',
+  // 后端代理的基础 URL
+  baseURL: '/api/feishu',
   // 设置默认的请求头
   headers: {
     'Content-Type': 'application/json',

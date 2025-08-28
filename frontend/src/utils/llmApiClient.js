@@ -76,12 +76,15 @@ llmApiClient.interceptors.response.use(
  * @param {Function} onDone - 处理完成事件的回调函数
  * @param {Function} onError - 处理错误的回调函数
  * @param {Function} forceUpdate - 强制更新UI的函数
+ * @param {AbortController} externalController - 外部传入的AbortController，用于取消请求
  */
-export const handleStreamResponse = async (config, onChunk, onDone, onError, forceUpdate) => {
+export const handleStreamResponse = async (config, onChunk, onDone, onError, forceUpdate, externalController) => {
+  // 使用外部传入的AbortController或创建新的
+  const controller = externalController || new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
+  
   try {
-    // 使用 fetch API 处理流式响应
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
+    console.log(`[流式请求] 开始请求: ${config.url}, 请求ID: ${controller.signal ? controller.signal.toString() : 'internal'}`);
     
     const response = await fetch(config.url, {
       method: config.method || 'POST',
@@ -120,6 +123,7 @@ export const handleStreamResponse = async (config, onChunk, onDone, onError, for
       const { value, done } = await reader.read();
       
       if (done) {
+        console.log(`[流式请求] 请求完成: ${config.url}`);
         if (onDone) onDone();
         break;
       }
@@ -132,6 +136,7 @@ export const handleStreamResponse = async (config, onChunk, onDone, onError, for
         if (part.startsWith('data: ')) {
           const data = part.substring(6).trim();
           if (data === '[DONE]') {
+            console.log(`[流式请求] 收到结束信号: ${config.url}`);
             if (onDone) onDone();
             return;
           }
@@ -168,10 +173,21 @@ export const handleStreamResponse = async (config, onChunk, onDone, onError, for
       }
     }
   } catch (error) {
-    console.error('Stream response error:', error);
+    console.error(`[流式请求] 请求错误: ${config.url}, 错误:`, error);
+    
+    // 检查是否是AbortError
+    if (error.name === 'AbortError') {
+      console.log(`[流式请求] 请求被取消: ${config.url}`);
+      // 对于被取消的请求，不调用onError回调，避免显示错误提示给用户
+      return;
+    }
+    
     if (onError) onError(error);
     // 重新抛出错误，让调用者能够处理
     throw error;
+  } finally {
+    // 确保超时计时器被清除
+    clearTimeout(timeoutId);
   }
 };
 

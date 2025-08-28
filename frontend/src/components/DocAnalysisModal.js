@@ -21,7 +21,7 @@ const processLiveMarkdown = (markdown) => {
         .replace(/<总分>(\d+)<\/总分>/g, '**总分: $1**');
 };
 
-const DocAnalysisModal = ({ visible, onClose, loading, analysisResult, reasoningContent, isReasoningDone, onAnalysis, onRestartAnalysis, isFetchingFullNavigation, fullNavigationNodeCount }) => {
+const DocAnalysisModal = ({ visible, onClose, loading, analysisResult, reasoningContent, isReasoningDone, onAnalysis, onRestartAnalysis, isFetchingFullNavigation, fullNavigationNodeCount, onExportToCloud }) => {
     const reasoningRef = useRef(null);
 
     useEffect(() => {
@@ -74,6 +74,9 @@ const DocAnalysisModal = ({ visible, onClose, loading, analysisResult, reasoning
     // 判断是否显示重新分析按钮
     const shouldShowRestartButton = !loading && (analysisResult || reasoningContent) && onRestartAnalysis;
     
+    // 判断是否显示导出按钮
+    const shouldShowExportButton = !loading && analysisResult && onExportToCloud;
+    
     // 渲染模态窗底部按钮
     const renderFooter = () => {
         if (shouldShowStartButton) {
@@ -89,17 +92,37 @@ const DocAnalysisModal = ({ visible, onClose, loading, analysisResult, reasoning
             ];
         }
         
-        if (shouldShowRestartButton) {
-            return [
-                <Button 
-                    key="restart" 
-                    className="gradient-purple-btn"
-                    onClick={onRestartAnalysis}
-                    disabled={loading}
-                >
-                    重新分析
-                </Button>
-            ];
+        if (shouldShowRestartButton || shouldShowExportButton) {
+            const buttons = [];
+            
+            if (shouldShowRestartButton) {
+                buttons.push(
+                    <Button 
+                        key="restart" 
+                        className="gradient-purple-btn"
+                        onClick={onRestartAnalysis}
+                        disabled={loading}
+                    >
+                        重新分析
+                    </Button>
+                );
+            }
+            
+            if (shouldShowExportButton) {
+                buttons.push(
+                    <Button 
+                        key="export" 
+                        type="primary"
+                        onClick={onExportToCloud}
+                        disabled={loading}
+                        style={{ marginLeft: '8px' }}
+                    >
+                        导出到云文档
+                    </Button>
+                );
+            }
+            
+            return buttons;
         }
         
         // 默认情况下不显示任何按钮，使用右上角的叉号关闭
