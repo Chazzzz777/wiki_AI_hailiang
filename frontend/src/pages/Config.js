@@ -112,10 +112,16 @@ const DEFAULT_PROMPTS = {
 function Config() {
   const navigate = useNavigate();
   const [form] = Form.useForm();
+  // 检查环境变量中是否配置了API key
+  const [isApiKeyRequired, setIsApiKeyRequired] = useState(!process.env.REACT_APP_LLM_API_KEY);
   
   // 从localStorage加载配置
   useEffect(() => {
-    const savedApiKey = localStorage.getItem('llm_api_key') || '84f26dd9-c3ae-4386-afd0-e370de343b8b';
+    // 优先使用用户配置的API key，如果没有则使用环境变量中的key，如果都没有则为空
+    const userConfiguredApiKey = localStorage.getItem('llm_api_key');
+    const envApiKey = process.env.REACT_APP_LLM_API_KEY || '';
+    // 如果用户没有配置过API key，则表单中显示为空，不显示环境变量中的值
+    const savedApiKey = userConfiguredApiKey || '';
     const savedModel = localStorage.getItem('llm_model') || 'doubao-seed-1-6-thinking-250615';
     const savedMaxTokens = localStorage.getItem('llm_max_tokens') || '4096';
     const savedPrompts = {
@@ -123,6 +129,9 @@ function Config() {
       docAnalysis: localStorage.getItem('prompt_doc_analysis') || DEFAULT_PROMPTS.docAnalysis,
       docImportAnalysis: localStorage.getItem('prompt_doc_import_analysis') || DEFAULT_PROMPTS.docImportAnalysis
     };
+    
+    // 根据环境变量设置API key是否必填
+    setIsApiKeyRequired(!envApiKey);
     
     form.setFieldsValue({
       apiKey: savedApiKey,
@@ -135,7 +144,12 @@ function Config() {
   // 保存配置
   const handleSave = (values) => {
     try {
-      localStorage.setItem('llm_api_key', values.apiKey);
+      // 只有当用户输入了API key时才保存到localStorage，否则删除localStorage中的配置
+      if (values.apiKey && values.apiKey.trim() !== '') {
+        localStorage.setItem('llm_api_key', values.apiKey);
+      } else {
+        localStorage.removeItem('llm_api_key');
+      }
       localStorage.setItem('llm_model', values.model);
       localStorage.setItem('llm_max_tokens', values.maxTokens || '4096');
       localStorage.setItem('prompt_wiki_analysis', values.wikiAnalysis);
@@ -150,8 +164,9 @@ function Config() {
   
   // 重置为默认配置
   const handleReset = () => {
+    // 重置时API key输入框保持为空，不显示环境变量中的值
     form.setFieldsValue({
-      apiKey: '84f26dd9-c3ae-4386-afd0-e370de343b8b',
+      apiKey: '',
       model: 'doubao-seed-1-6-thinking-250615',
       maxTokens: '4096',
       wikiAnalysis: DEFAULT_PROMPTS.wikiAnalysis,
@@ -177,9 +192,10 @@ function Config() {
             <Form.Item
               label="大模型 API Key"
               name="apiKey"
-              rules={[{ required: true, message: '请输入 API Key' }]}
+              rules={[{ required: isApiKeyRequired, message: '请输入 API Key' }]}
+              extra={isApiKeyRequired ? "环境变量未配置API Key，请在此处输入" : "环境变量已配置API Key，此项为可选"}
             >
-              <Input.Password placeholder="输入你的大模型 API Key" />
+              <Input.Password placeholder={isApiKeyRequired ? "输入你的大模型 API Key" : "输入你的大模型 API Key（可选）"} />
             </Form.Item>
             
             <Form.Item
