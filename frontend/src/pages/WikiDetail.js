@@ -861,7 +861,7 @@ const WikiDetail = () => {
     try {
       console.log('Starting document import analysis', { docToken, docType });
       
-      const storedApiKey = localStorage.getItem('llm_api_key') || '84f26dd9-c3ae-4386-afd0-e370de343b8b';
+      const storedApiKey = localStorage.getItem('llm_api_key') || process.env.REACT_APP_LLM_API_KEY;
       const storedModel = localStorage.getItem('llm_model') || 'doubao-seed-1-6-thinking-250615';
       const storedMaxTokens = localStorage.getItem('llm_max_tokens') || '4096';
       // 使用包含占位符的提示词模板
@@ -1728,7 +1728,7 @@ ${batchResults.map((result, index) => {
   
   // 开始知识库AI分析任务
   const startWikiAnalysis = async () => {
-    const storedApiKey = localStorage.getItem('llm_api_key') || '84f26dd9-c3ae-4386-afd0-e370de343b8b';
+    const storedApiKey = localStorage.getItem('llm_api_key') || process.env.REACT_APP_LLM_API_KEY;
     const storedModel = localStorage.getItem('llm_model') || 'doubao-seed-1-6-thinking-250615';
     const storedMaxTokens = localStorage.getItem('llm_max_tokens') || '4096';
     const storedPrompt = localStorage.getItem('prompt_wiki_analysis') || `你是一位知识管理专家，擅长检查知识库的结构是否合理。用户希望优化现有的知识库结构，以更好地服务于大模型知识问答。请使用Markdown格式输出评估结果，确保结构清晰、重要信息高亮。
@@ -1981,7 +1981,7 @@ ${batchResults.map((result, index) => {
   
   // 开始文档AI分析任务
   const startDocAnalysis = async () => {
-    const storedApiKey = localStorage.getItem('llm_api_key');
+    const storedApiKey = localStorage.getItem('llm_api_key') || process.env.REACT_APP_LLM_API_KEY;
     const storedModel = localStorage.getItem('llm_model') || 'doubao-seed-1-6-thinking-250615';
     const storedMaxTokens = localStorage.getItem('llm_max_tokens') || '4096';
     const storedPrompt = localStorage.getItem('prompt_doc_analysis') || `你是一位知识管理大师，负责根据用户提供的当前文档和该文档所在的知识库节点，对文档进行多维度打分评估。请使用Markdown格式输出评估结果，确保结构清晰、重要信息高亮。
@@ -2029,8 +2029,8 @@ ${batchResults.map((result, index) => {
   - [提出具体可行的改进措施]`;
     const userAccessToken = localStorage.getItem('user_access_token');
 
-    if (!storedApiKey || !userAccessToken) {
-      message.error('请先设置并保存大模型 API Key 和 User Access Token');
+    if (!userAccessToken) {
+      message.error('请先设置并保存 User Access Token');
       return;
     }
 

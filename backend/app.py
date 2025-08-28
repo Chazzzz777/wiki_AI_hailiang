@@ -16,13 +16,15 @@ from openai import OpenAI
 load_dotenv() # Load environment variables from .env file
 
 # --- Environment Variables ---
-FRONTEND_PORT = os.getenv('REACT_APP_FRONTEND_PORT', 3001)
-BACKEND_PORT = os.getenv('BACKEND_PORT', 5001)
+FRONTEND_PORT = os.getenv('REACT_APP_FRONTEND_PORT', 3005)
+BACKEND_PORT = os.getenv('BACKEND_PORT', 5005)
 FEISHU_APP_ID = os.getenv('FEISHU_APP_ID')
 FEISHU_APP_SECRET = os.getenv('FEISHU_APP_SECRET')
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": f"http://localhost:{FRONTEND_PORT}", "supports_credentials": True}})
+# 获取主机名环境变量，默认为localhost
+HOSTNAME = os.getenv('HOSTNAME', 'localhost')
+CORS(app, resources={r"/api/*": {"origins": [f"http://localhost:{FRONTEND_PORT}", f"http://{HOSTNAME}:{FRONTEND_PORT}", "http://115.190.84.247:3005"], "supports_credentials": True}})
 
 # --- Logging Configuration ---
 import os
@@ -1144,7 +1146,12 @@ def get_user_access_token(code, redirect_uri):
         app.logger.error(f"Request error while getting user_access_token: {str(e)}")
         if hasattr(e, 'response') and e.response is not None:
             app.logger.error(f"Response status: {e.response.status_code}")
-            # 不记录完整的响应内容，避免敏感信息泄露
+            # 尝试记录飞书API返回的错误信息，帮助排查问题
+            try:
+                error_data = e.response.json()
+                app.logger.error(f"Feishu API error response: {json.dumps(error_data)}")
+            except ValueError:
+                app.logger.error("Failed to parse error response as JSON")
         return None
     except ValueError as e:
         app.logger.error(f"JSON parsing error while getting user_access_token: {str(e)}")
@@ -1187,10 +1194,12 @@ def auth_callback():
         app.logger.info(f"Received authorization code (length: {len(code)})")
         
         # 从环境变量获取前端URL，如果没有则使用默认值
-        frontend_base_url = os.getenv('FRONTEND_BASE_URL', f"http://localhost:{FRONTEND_PORT}")
+        # 使用HOSTNAME环境变量作为主机名，确保与前端配置一致
+        hostname = os.getenv('HOSTNAME', 'localhost')
+        frontend_base_url = os.getenv('FRONTEND_BASE_URL', f"http://{hostname}:{FRONTEND_PORT}")
         
-        # 构建重定向URL，确保URL格式正确，重定向到/auth路径
-        redirect_url = f"{frontend_base_url}/auth?code={code}"
+        # 构建重定向URL，确保URL格式正确，重定向到根路径（不带末尾的/）
+        redirect_url = f"{frontend_base_url}?code={code}"
         
         app.logger.info(f"Redirecting to frontend: {frontend_base_url}")
         
@@ -1365,6 +1374,17 @@ def get_token():
     然后向飞书API请求访问令牌，并返回给前端。
     """
     app.logger.info("--- Received /api/auth/token request ---")
+    
+    # 打印授权相关的环境变量和配置信息
+    app.logger.info("=== 授权相关配置信息 ===")
+    app.logger.info(f"后端端口: {BACKEND_PORT}")
+    app.logger.info(f"前端端口: {FRONTEND_PORT}")
+    app.logger.info(f"主机名: {os.getenv('HOSTNAME', 'localhost')}")
+    app.logger.info(f"飞书应用ID: {FEISHU_APP_ID}")
+    app.logger.info("CORS配置: 已启用CORS支持")
+    app.logger.info(f"请求来源: {request.remote_addr}")
+    app.logger.info(f"请求头: {dict(request.headers)}")
+    app.logger.info("=========================")
     
     try:
         # 获取请求数据
@@ -1564,7 +1584,7 @@ def request_with_backoff(url, headers, params=None, json=None, max_retries=5):
     raise requests.exceptions.RequestException("Max retries reached without successful response")
 
 # 限制请求频率为 100 次/分钟，防止超频报错
-rate_limiter = RateLimiter(max_calls=100, per_seconds=60)
+rate_limiter = RateLimiter(max_calls=50, per_seconds=1)
 
 # 获取知识空间信息接口
 @app.route('/api/wiki/spaces', methods=['GET'])
@@ -2867,4 +2887,16 @@ def get_search_progress(search_id):
 
 if __name__ == '__main__':
     load_dotenv()
-    app.run(port=BACKEND_PORT, debug=False, use_reloader=False)
+    
+    # 打印环境变量和配置信息
+    print("=== 后端应用启动配置信息 ===")
+    print(f"后端端口: {BACKEND_PORT}")
+    print(f"前端端口: {FRONTEND_PORT}")
+    print(f"主机名: {os.getenv('HOSTNAME', 'localhost')}")
+    print(f"飞书应用ID: {FEISHU_APP_ID}")
+    print(f"日志级别: {os.getenv('LOG_LEVEL', 'INFO')}")
+    print(f"Flask环境: {os.getenv('FLASK_ENV', 'development')}")
+    print(f"CORS配置: 已启用CORS支持")
+    print("==============================\n")
+    
+    app.run(host='0.0.0.0', port=BACKEND_PORT, debug=False, use_reloader=False)
