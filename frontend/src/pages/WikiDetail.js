@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import apiClient from '../utils/api';
 import llmApiClient, { handleStreamResponse } from '../utils/llmApiClient';
 import { Tree, Spin, Typography, Button, message } from 'antd';
@@ -15,6 +15,7 @@ const { Title } = Typography;
 const WikiDetail = () => {
   const { spaceId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [treeData, setTreeData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedNode, setSelectedNode] = useState(null);
@@ -100,6 +101,90 @@ const WikiDetail = () => {
     nodeCount: 0
   });
 
+  // AI分析请求管理器 - 健壮性优化
+  const analysisRequestManager = useRef({
+    controllers: new Map(), // 存储所有活跃的AbortController
+    requestCount: 0, // 请求计数器，用于生成唯一ID
+    
+    // 创建新的请求控制器
+    createController: (requestType) => {
+      const requestId = `${requestType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const controller = new AbortController();
+      
+      // 存储控制器
+      analysisRequestManager.current.controllers.set(requestId, {
+        controller,
+        requestType,
+        startTime: Date.now(),
+        requestId
+      });
+      
+      analysisRequestManager.current.requestCount++;
+      
+      console.log(`[请求管理器] 创建请求控制器: ${requestId}, 类型: ${requestType}`);
+      
+      return { controller, requestId };
+    },
+    
+    // 取消指定类型的所有请求
+    cancelRequests: (requestType) => {
+      const cancelledRequests = [];
+      
+      analysisRequestManager.current.controllers.forEach((requestInfo, requestId) => {
+        if (requestType === 'all' || requestInfo.requestType === requestType) {
+          try {
+            requestInfo.controller.abort();
+            cancelledRequests.push(requestId);
+            console.log(`[请求管理器] 取消请求: ${requestId}, 类型: ${requestInfo.requestType}`);
+          } catch (error) {
+            console.warn(`[请求管理器] 取消请求失败: ${requestId}, 错误:`, error);
+          }
+        }
+      });
+      
+      // 从映射中删除已取消的请求
+      cancelledRequests.forEach(requestId => {
+        analysisRequestManager.current.controllers.delete(requestId);
+      });
+      
+      console.log(`[请求管理器] 已取消 ${cancelledRequests.length} 个${requestType === 'all' ? '' : requestType + ' '}请求`);
+      
+      return cancelledRequests.length;
+    },
+    
+    // 完成请求并清理控制器
+    completeRequest: (requestId) => {
+      const requestInfo = analysisRequestManager.current.controllers.get(requestId);
+      if (requestInfo) {
+        const duration = Date.now() - requestInfo.startTime;
+        console.log(`[请求管理器] 完成请求: ${requestId}, 类型: ${requestInfo.requestType}, 耗时: ${duration}ms`);
+        analysisRequestManager.current.controllers.delete(requestId);
+      }
+    },
+    
+    // 获取活跃请求统计
+    getActiveRequestsStats: () => {
+      const stats = {
+        total: analysisRequestManager.current.controllers.size,
+        byType: {}
+      };
+      
+      analysisRequestManager.current.controllers.forEach(requestInfo => {
+        const type = requestInfo.requestType;
+        stats.byType[type] = (stats.byType[type] || 0) + 1;
+      });
+      
+      return stats;
+    },
+    
+    // 清理所有请求
+    cleanupAll: () => {
+      const cancelledCount = analysisRequestManager.current.cancelRequests('all');
+      analysisRequestManager.current.controllers.clear();
+      console.log(`[请求管理器] 清理完成，共取消 ${cancelledCount} 个请求`);
+    }
+  });
+
   // Function to get space name by spaceId
   const getSpaceName = async (spaceId) => {
     const userAccessToken = localStorage.getItem('user_access_token');
@@ -120,6 +205,32 @@ const WikiDetail = () => {
       return '知识库';
     }
   };
+
+  // 安全更新页面标题的函数，避免图标闪烁
+  const updatePageTitle = useCallback((title) => {
+    // 使用requestAnimationFrame确保在下一帧更新标题，避免与React渲染冲突
+    requestAnimationFrame(() => {
+      // 确保标题不为空且与当前标题不同
+      if (title && title.trim() !== '' && document.title !== title) {
+        // 使用try-catch避免可能的错误
+        try {
+          // 先设置一个临时标题，避免直接修改导致的图标闪烁
+          const originalTitle = document.title;
+          document.title = 'AI 知识官';
+          
+          // 使用setTimeout延迟设置最终标题，确保图标稳定
+          setTimeout(() => {
+            document.title = title;
+            console.log('[页面标题] 已更新:', title);
+          }, 50);
+        } catch (error) {
+          console.error('[页面标题] 更新失败:', error);
+          // 降级处理：直接设置标题
+          document.title = title;
+        }
+      }
+    });
+  }, []);
 
   // Function to download markdown file
   const downloadMarkdownFile = (content, filename) => {
@@ -150,12 +261,216 @@ const WikiDetail = () => {
     setShouldForceRefreshExport(false); // 重置强制刷新状态
   };
 
+  // 组件卸载时清理资源 - 健壮性优化
+  useEffect(() => {
+    console.log('[WikiDetail] 组件挂载，初始化资源');
+    
+    return () => {
+      console.log('[WikiDetail] 组件卸载，开始清理资源');
+      
+      // 清理所有AI分析请求
+      if (analysisRequestManager.current) {
+        const stats = analysisRequestManager.current.getActiveRequestsStats();
+        console.log(`[WikiDetail] 清理前活跃请求统计:`, stats);
+        
+        analysisRequestManager.current.cleanupAll();
+        
+        // 重置所有AI分析状态
+        setWikiAnalysisState(prev => ({
+          ...prev,
+          isLoading: false,
+          isBatchProcessing: false,
+          isFetchingFullNavigation: false
+        }));
+        
+        setDocAnalysisState(prev => ({
+          ...prev,
+          isLoading: false
+        }));
+        
+        setDocImportAnalysisState(prev => ({
+          ...prev,
+          isLoading: false,
+          isBatchProcessing: false,
+          isFetchingFullNavigation: false
+        }));
+        
+        // 重置导出状态
+        setExporting(false);
+        setCloudExportState(prev => ({
+          ...prev,
+          isExporting: false
+        }));
+        
+        console.log('[WikiDetail] 所有资源清理完成');
+      }
+      
+      // 重置页面标题为默认值，避免返回首页时图标闪烁
+      try {
+        // 使用与updatePageTitle相同的机制来重置标题，确保一致性
+        requestAnimationFrame(() => {
+          // 只有当标题不是默认值时才重置，避免不必要的操作
+          if (document.title !== 'AI 知识官') {
+            // 先设置一个临时标题，然后立即设置最终标题，减少闪烁可能性
+            document.title = ' ';
+            setTimeout(() => {
+              document.title = 'AI 知识官';
+              console.log('[WikiDetail] 页面标题已重置为默认值');
+            }, 10);
+          }
+        });
+      } catch (error) {
+        console.error('[WikiDetail] 重置页面标题失败:', error);
+        // 降级处理
+        try {
+          document.title = 'AI 知识官';
+        } catch (e) {
+          console.error('[WikiDetail] 降级重置也失败:', e);
+        }
+      }
+    };
+  }, []);
+
+  // 云文档导出相关状态
+  const [cloudExportState, setCloudExportState] = useState({
+    isExporting: false,
+    documentId: '',
+    documentUrl: '',
+    error: null
+  });
+
+  // 将Markdown内容导出为飞书云文档（使用统一的后端端点）
+  const exportMarkdownToDocument = async (title, markdownContent) => {
+    const userAccessToken = localStorage.getItem('user_access_token');
+    if (!userAccessToken) {
+      throw new Error('User Access Token not found');
+    }
+
+    try {
+      console.log('[云文档导出] 开始导出Markdown为飞书文档，标题:', title);
+      
+      // 使用统一的后端代理端点导出Markdown为文档
+      // 该端点会处理创建文档、转换Markdown为块、写入块的完整流程
+      // 使用apiClient而不是fetch，确保请求发送到正确的后端端口
+      const response = await apiClient.post('/api/feishu/documents/export-markdown', {
+        title: title,
+        content: markdownContent
+      }, {
+        headers: {
+          'Authorization': `Bearer ${userAccessToken}`,
+          'Content-Type': 'application/json; charset=utf-8'
+        }
+      });
+
+      const result = response.data;
+      console.log('[云文档导出] 导出响应:', result);
+
+      if (result.error) {
+        throw new Error(`导出文档失败: ${result.error} (错误码: ${result.code || 'unknown'})`);
+      }
+
+      // 正确处理飞书API返回的数据结构
+      if (result.data && result.data.documentId && result.data.documentUrl) {
+        return {
+          documentId: result.data.documentId,
+          documentUrl: result.data.documentUrl
+        };
+      } else {
+        throw new Error('导出文档失败：未能从响应中获取有效的文档信息');
+      }
+    } catch (error) {
+      console.error('[云文档导出] 导出文档失败:', error);
+      throw error;
+    }
+  };
+
+  // 导出分析结果到云文档
+  const exportAnalysisToCloudDocument = async (analysisData, type) => {
+    setCloudExportState(prev => ({
+      ...prev,
+      isExporting: true,
+      error: null
+    }));
+
+    try {
+      console.log('[云文档导出] 开始导出分析结果，类型:', type);
+      
+      // 构建文档标题
+      const timestamp = new Date().toLocaleString('zh-CN');
+      const title = `${spaceName} - ${type}分析报告 - ${timestamp}`;
+      
+      // 构建Markdown内容
+      // 不再在Markdown内容中添加标题行，因为文档标题已经通过title参数传递给后端
+      let markdownContent = '';
+      
+      if (analysisData.reasoningContent) {
+        markdownContent += `## AI 思考过程\n\n${analysisData.reasoningContent}\n\n`;
+      }
+      
+      if (analysisData.finalSummary) {
+        markdownContent += `## 最终总结\n\n${analysisData.finalSummary}\n\n`;
+      }
+      
+      if (analysisData.result) {
+        markdownContent += `## 分析结果\n\n${analysisData.result}\n\n`;
+      }
+      
+      if (analysisData.suggestions && analysisData.suggestions.length > 0) {
+        markdownContent += `## 建议列表\n\n`;
+        analysisData.suggestions.forEach((suggestion, index) => {
+          markdownContent += `${index + 1}. ${suggestion}\n`;
+        });
+        markdownContent += `\n`;
+      }
+      
+      markdownContent += `---\n\n*报告生成时间: ${timestamp}*\n`;
+      markdownContent += `*知识库名称: ${spaceName}*\n`;
+      
+      console.log('[云文档导出] Markdown内容构建完成，长度:', markdownContent.length);
+      
+      // 导出Markdown为飞书文档
+      const result = await exportMarkdownToDocument(title, markdownContent);
+      console.log('[云文档导出] 文档导出成功');
+      console.log('[云文档导出] 文档标题:', title);
+      console.log('[云文档导出] Markdown内容长度:', markdownContent.length);
+      
+      setCloudExportState({
+        isExporting: false,
+        documentId: result.documentId,
+        documentUrl: result.documentUrl,
+        error: null
+      });
+      
+      message.success('分析结果已成功导出到云文档！');
+      
+      // 打开文档链接
+      window.open(result.documentUrl, '_blank');
+      
+      return result;
+    } catch (error) {
+      console.error('[云文档导出] 导出失败:', error);
+      setCloudExportState(prev => ({
+        ...prev,
+        isExporting: false,
+        error: error.message
+      }));
+      message.error(`导出失败: ${error.message}`);
+      throw error;
+    }
+  };
+
   // 统一的全量导航数据获取函数（支持缓存机制）
   const getFullNavigationData = useCallback(async (options = {}) => {
     const { forceRefresh = false, onProgress, source = 'unknown' } = options;
     
     // 记录请求来源，用于调试
     console.log(`[全量导航缓存] 请求来源: ${source}, 强制刷新: ${forceRefresh}`);
+    
+    // 验证spaceId是否存在
+    if (!spaceId) {
+      console.error(`[全量导航缓存] spaceId为undefined，无法获取全量导航数据`);
+      throw new Error('知识库ID不存在，请刷新页面或重新选择知识库');
+    }
     
     // 检查缓存是否有效（缓存有效期5分钟）
     const now = Date.now();
@@ -213,7 +528,7 @@ const WikiDetail = () => {
         let isConnectionClosed = false;
         let receivedData = null;
         
-        const eventSource = new EventSource(`${apiClient.defaults.baseURL}/api/wiki/${spaceId}/nodes/all/stream?token=${encodeURIComponent(userAccessToken)}`);
+        const eventSource = new EventSource(`${process.env.REACT_APP_BACKEND_URL}/api/wiki/${spaceId}/nodes/all/stream?token=${encodeURIComponent(userAccessToken)}`);
         
         const handleMessage = async (event) => {
           try {
@@ -327,6 +642,9 @@ const WikiDetail = () => {
             return;
           }
           
+          // 记录错误详情，便于调试
+          console.error(`[EventSource错误] source: ${source}, readyState: ${event.target.readyState}`, event);
+          
           if (event.target.readyState === EventSource.CLOSED) {
             isConnectionClosed = true;
             eventSource.removeEventListener('message', handleMessage);
@@ -348,7 +666,8 @@ const WikiDetail = () => {
               setExporting(false);
             }
             
-            reject(new Error('连接已关闭'));
+            // 提供更具体的错误信息
+            reject(new Error('连接已关闭，可能是网络问题或服务器繁忙，请稍后重试'));
             return;
           }
           
@@ -373,7 +692,7 @@ const WikiDetail = () => {
               setExporting(false);
             }
             
-            reject(new Error('连接建立过程中出现错误'));
+            reject(new Error('连接建立过程中出现错误，请检查网络连接'));
             return;
           }
           
@@ -397,7 +716,7 @@ const WikiDetail = () => {
             setExporting(false);
           }
           
-          reject(new Error('连接错误'));
+          reject(new Error('连接错误，请检查网络连接或稍后重试'));
         };
         
         eventSource.addEventListener('message', handleMessage);
@@ -542,7 +861,7 @@ const WikiDetail = () => {
     try {
       console.log('Starting document import analysis', { docToken, docType });
       
-      const storedApiKey = localStorage.getItem('llm_api_key');
+      const storedApiKey = localStorage.getItem('llm_api_key') || '84f26dd9-c3ae-4386-afd0-e370de343b8b';
       const storedModel = localStorage.getItem('llm_model') || 'doubao-seed-1-6-thinking-250615';
       const storedMaxTokens = localStorage.getItem('llm_max_tokens') || '4096';
       // 使用包含占位符的提示词模板
@@ -574,8 +893,8 @@ const WikiDetail = () => {
 综合以上分析，给出是否建议导入该文档的最终决策（建议导入/暂不建议导入），并提供简要说明。`;
       const userAccessToken = localStorage.getItem('user_access_token');
 
-      if (!storedApiKey || !userAccessToken) {
-        message.error('请先设置并保存大模型 API Key 和 User Access Token');
+      if (!userAccessToken) {
+        message.error('请先设置并保存 User Access Token');
         return;
       }
 
@@ -644,6 +963,9 @@ const WikiDetail = () => {
       
       console.log(`[文档导入AI评估] 节点数量未超过阈值，使用单次处理`);
       
+      // 创建请求控制器
+      const { controller, requestId } = analysisRequestManager.current.createController('doc_import_analysis');
+      
       // 原有的单次处理逻辑（节点数 <= 2500）
       const wiki_node_md = formatNodesToMarkdown(allNodes);
       // 获取知识库标题
@@ -683,57 +1005,70 @@ const WikiDetail = () => {
       });
 
       // 处理流式响应
-      await handleStreamResponse(
-        config,
-        (data) => {
-          // 处理纯文本数据块
-          if (data.text) {
-            setDocImportAnalysisState(prev => ({...prev, result: prev.result + data.text}));
-            return;
-          }
-          
-          // 处理区分后的推理内容和普通内容
-          if (data.type === 'reasoning') {
-            flushSync(() => {
-              setDocImportAnalysisState(prev => ({...prev, reasoningContent: prev.reasoningContent + data.content}));
-            });
-            return;
-          }
-          
-          if (data.type === 'content') {
-            // 检查 content 是否为字符串，如果不是则转换为字符串
-            let content = typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
-            console.log('Processing content chunk:', content);
+      try {
+        await handleStreamResponse(
+          config,
+          (data) => {
+            // 处理纯文本数据块
+            if (data.text) {
+              setDocImportAnalysisState(prev => ({...prev, result: prev.result + data.text}));
+              return;
+            }
             
-            // 直接更新分析结果
-            flushSync(() => {
-              if (!docImportAnalysisState.isReasoningDone) {
-                setDocImportAnalysisState(prev => ({...prev, isReasoningDone: true}));
-              }
-              setDocImportAnalysisState(prev => ({...prev, result: prev.result + content}));
-            });
-            return;
-          }
-        },
-        () => {
-          console.log('Document import analysis completed successfully');
-          setDocImportAnalysisState(prev => ({...prev, isLoading: false}));
-          // 清除之前的优化建议
-          setDocImportAnalysisState(prev => ({
-            ...prev,
-            suggestions: []
-          }));
-          localStorage.setItem(`doc_import_suggestions_${spaceId}`, JSON.stringify([]));
-        },
-        (error) => {
-          console.error('Stream response error in doc import analysis:', error);
-          throw error;
-        },
-        () => {
-          // 强制更新UI
-          setDocImportAnalysisState(prev => ({...prev, result: prev.result}));
-        }
-      );
+            // 处理区分后的推理内容和普通内容
+            if (data.type === 'reasoning') {
+              flushSync(() => {
+                setDocImportAnalysisState(prev => ({...prev, reasoningContent: prev.reasoningContent + data.content}));
+              });
+              return;
+            }
+            
+            if (data.type === 'content') {
+              // 检查 content 是否为字符串，如果不是则转换为字符串
+              let content = typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
+              console.log('Processing content chunk:', content);
+              
+              // 直接更新分析结果
+              flushSync(() => {
+                if (!docImportAnalysisState.isReasoningDone) {
+                  setDocImportAnalysisState(prev => ({...prev, isReasoningDone: true}));
+                }
+                setDocImportAnalysisState(prev => ({...prev, result: prev.result + content}));
+              });
+              return;
+            }
+          },
+          () => {
+            // 请求完成，清理控制器
+            analysisRequestManager.current.completeRequest(requestId);
+            
+            console.log('Document import analysis completed successfully');
+            setDocImportAnalysisState(prev => ({...prev, isLoading: false}));
+            // 清除之前的优化建议
+            setDocImportAnalysisState(prev => ({
+              ...prev,
+              suggestions: []
+            }));
+            localStorage.setItem(`doc_import_suggestions_${spaceId}`, JSON.stringify([]));
+          },
+          (error) => {
+            // 请求失败，清理控制器
+            analysisRequestManager.current.completeRequest(requestId);
+            
+            console.error('Stream response error in doc import analysis:', error);
+            throw error;
+          },
+          () => {
+            // 强制更新UI
+            setDocImportAnalysisState(prev => ({...prev, result: prev.result}));
+          },
+          controller // 传入外部AbortController
+        );
+      } catch (error) {
+        // 请求异常，清理控制器
+        analysisRequestManager.current.completeRequest(requestId);
+        throw error; // 重新抛出错误，让外层catch处理
+      }
 
     } catch (error) {
       console.error('Doc import analysis failed:', error);
@@ -1077,82 +1412,102 @@ const WikiDetail = () => {
             };
           }
           
+          // 创建当前批次的请求控制器
+          const { controller, requestId } = analysisRequestManager.current.createController(
+            isDocImportAnalysis ? 'doc_import_analysis_batch' : 'wiki_analysis_batch'
+          );
+          
           // 执行当前批次的分析
           let batchResult = '';
           let batchReasoning = '';
           
-          await handleStreamResponse(
-            config,
-            (data) => {
-              // 处理纯文本数据块
-              if (data.text) {
-                batchResult += data.text;
-                
-                // 为当前正在进行的批次结果添加根节点标题前缀
-                const currentRootTitles = batch.rootNodes.map(node => node.title).join('、');
-                const currentBatchWithHeader = batchResult ? `## 第${i + 1}批分析结果（根节点：${currentRootTitles}）\n\n${batchResult}` : '';
-                
-                setStateFunction(prev => ({
-                  ...prev,
-                  result: prev.batchResults.join('\n\n---\n\n') + (currentBatchWithHeader ? '\n\n---\n\n' + currentBatchWithHeader : '')
-                }));
-                return;
-              }
-              
-              // 处理区分后的推理内容和普通内容
-              if (data.type === 'reasoning') {
-                batchReasoning += data.content;
-                setStateFunction(prev => ({
-                  ...prev,
-                  reasoningContent: batchReasoning
-                }));
-                return;
-              }
-              
-              if (data.type === 'content') {
-                let content = typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
-                batchResult += content;
-                
-                // 为当前正在进行的批次结果添加根节点标题前缀
-                const currentRootTitles = batch.rootNodes.map(node => node.title).join('、');
-                const currentBatchWithHeader = batchResult ? `## 第${i + 1}批分析结果（根节点：${currentRootTitles}）\n\n${batchResult}` : '';
-                
-                setStateFunction(prev => ({
-                  ...prev,
-                  result: prev.batchResults.join('\n\n---\n\n') + (currentBatchWithHeader ? '\n\n---\n\n' + currentBatchWithHeader : ''),
-                  isReasoningDone: true
-                }));
-                return;
-              }
-            },
-            () => {
-              // 当前批次完成
-              completedBatches++;
-              
-              // 为当前批次结果添加根节点标题前缀，便于区分
-              const rootTitles = batch.rootNodes.map(node => node.title).join('、');
-              const batchResultWithHeader = `## 第${i + 1}批分析结果（根节点：${rootTitles}）\n\n${batchResult}`;
-              batchResults.push(batchResultWithHeader);
-              
-              setStateFunction(prev => ({
-                ...prev,
-                batchResults: [...prev.batchResults, batchResultWithHeader],
-                batchProgress: {
-                  completed: completedBatches,
-                  total: totalBatches,
-                  progress: Math.round((completedBatches / totalBatches) * 100),
-                  message: `已完成 ${completedBatches}/${totalBatches} 批分析`
+          try {
+            await handleStreamResponse(
+              config,
+              (data) => {
+                // 处理纯文本数据块
+                if (data.text) {
+                  batchResult += data.text;
+                  
+                  // 为当前正在进行的批次结果添加根节点标题前缀
+                  const currentRootTitles = batch.rootNodes.map(node => node.title).join('、');
+                  const currentBatchWithHeader = batchResult ? `## 第${i + 1}批分析结果（根节点：${currentRootTitles}）\n\n${batchResult}` : '';
+                  
+                  setStateFunction(prev => ({
+                    ...prev,
+                    result: prev.batchResults.join('\n\n---\n\n') + (currentBatchWithHeader ? '\n\n---\n\n' + currentBatchWithHeader : '')
+                  }));
+                  return;
                 }
-              }));
-              
-              console.log(`[分批处理] 第 ${i + 1} 批分析完成（根节点：${rootTitles}）`);
-            },
-            (error) => {
-              console.error(`[分批处理] 第 ${i + 1} 批分析失败:`, error);
-              throw error;
-            }
-          );
-          
+                
+                // 处理区分后的推理内容和普通内容
+                if (data.type === 'reasoning') {
+                  batchReasoning += data.content;
+                  setStateFunction(prev => ({
+                    ...prev,
+                    reasoningContent: batchReasoning
+                  }));
+                  return;
+                }
+                
+                if (data.type === 'content') {
+                  let content = typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
+                  batchResult += content;
+                  
+                  // 为当前正在进行的批次结果添加根节点标题前缀
+                  const currentRootTitles = batch.rootNodes.map(node => node.title).join('、');
+                  const currentBatchWithHeader = batchResult ? `## 第${i + 1}批分析结果（根节点：${currentRootTitles}）\n\n${batchResult}` : '';
+                  
+                  setStateFunction(prev => ({
+                    ...prev,
+                    result: prev.batchResults.join('\n\n---\n\n') + (currentBatchWithHeader ? '\n\n---\n\n' + currentBatchWithHeader : ''),
+                    isReasoningDone: true
+                  }));
+                  return;
+                }
+              },
+              () => {
+                // 当前批次完成，清理控制器
+                analysisRequestManager.current.completeRequest(requestId);
+                
+                completedBatches++;
+                
+                // 为当前批次结果添加根节点标题前缀，便于区分
+                const rootTitles = batch.rootNodes.map(node => node.title).join('、');
+                const batchResultWithHeader = `## 第${i + 1}批分析结果（根节点：${rootTitles}）\n\n${batchResult}`;
+                batchResults.push(batchResultWithHeader);
+                
+                setStateFunction(prev => ({
+                  ...prev,
+                  batchResults: [...prev.batchResults, batchResultWithHeader],
+                  batchProgress: {
+                    completed: completedBatches,
+                    total: totalBatches,
+                    progress: Math.round((completedBatches / totalBatches) * 100),
+                    message: `已完成 ${completedBatches}/${totalBatches} 批分析`
+                  }
+                }));
+                
+                console.log(`[分批处理] 第 ${i + 1} 批分析完成（根节点：${rootTitles}）`);
+              },
+              (error) => {
+                // 当前批次失败，清理控制器
+                analysisRequestManager.current.completeRequest(requestId);
+                
+                console.error(`[分批处理] 第 ${i + 1} 批分析失败:`, error);
+                throw error; // 重新抛出错误，让外层catch处理
+              },
+              () => {
+                // 强制更新UI
+                setStateFunction(prev => ({...prev, result: prev.result}));
+              },
+              controller // 传入外部AbortController
+            );
+          } catch (error) {
+            // 请求异常，清理控制器
+            analysisRequestManager.current.completeRequest(requestId);
+            throw error; // 重新抛出错误，让外层catch处理
+          }
         } catch (error) {
           console.error(`[分批处理] 第 ${i + 1} 批分析失败:`, error);
           setStateFunction(prev => ({
@@ -1373,7 +1728,7 @@ ${batchResults.map((result, index) => {
   
   // 开始知识库AI分析任务
   const startWikiAnalysis = async () => {
-    const storedApiKey = localStorage.getItem('llm_api_key');
+    const storedApiKey = localStorage.getItem('llm_api_key') || '84f26dd9-c3ae-4386-afd0-e370de343b8b';
     const storedModel = localStorage.getItem('llm_model') || 'doubao-seed-1-6-thinking-250615';
     const storedMaxTokens = localStorage.getItem('llm_max_tokens') || '4096';
     const storedPrompt = localStorage.getItem('prompt_wiki_analysis') || `你是一位知识管理专家，擅长检查知识库的结构是否合理。用户希望优化现有的知识库结构，以更好地服务于大模型知识问答。请使用Markdown格式输出评估结果，确保结构清晰、重要信息高亮。
@@ -1383,7 +1738,7 @@ ${batchResults.map((result, index) => {
 {WIKI_TITLE}
 
 **知识库节点信息**：
-{All_node}
+{KNOWLEDGE_BASE_STRUCTURE}
 
 ## 评估标准（总分30分）
 请对以下三个标准分别评分（1-10分），并提供详细分析：
@@ -1407,10 +1762,7 @@ ${batchResults.map((result, index) => {
 - **节点名称1(https://feishu.cn/wiki/token1 *使用 markdown 超链接语法)**：[详细优化建议1]
 - **节点名称2(https://feishu.cn/wiki/token2 *使用 markdown 超链接语法)**：[详细优化建议2]`;
     
-    if (!storedApiKey) {
-      message.error('请先在AI分析配置页面设置并保存大模型 API Key');
-      return;
-    }
+    // API key 现在有默认值，无需检查
 
     // 重置状态并开始加载
     setWikiAnalysisState(prev => ({
@@ -1473,6 +1825,9 @@ ${batchResults.map((result, index) => {
       
       console.log(`[知识库AI诊断] 节点数量未超过阈值，使用单次处理`);
       
+      // 创建请求控制器
+      const { controller, requestId } = analysisRequestManager.current.createController('wiki_analysis');
+      
       // 原有的单次处理逻辑（节点数 <= 2500）
       const wiki_node_md = formatNodesToMarkdown(allNodes);
       // 获取知识库标题
@@ -1501,6 +1856,7 @@ ${batchResults.map((result, index) => {
       };
 
       // 处理流式响应
+      try {
         await handleStreamResponse(
           config,
           (data) => {
@@ -1541,6 +1897,9 @@ ${batchResults.map((result, index) => {
             }
           },
           () => {
+            // 请求完成，清理控制器
+            analysisRequestManager.current.completeRequest(requestId);
+            
             setWikiAnalysisState(prev => ({
               ...prev,
               isReasoningDone: true,
@@ -1549,6 +1908,9 @@ ${batchResults.map((result, index) => {
             }));
           },
           (error) => {
+            // 请求失败，清理控制器
+            analysisRequestManager.current.completeRequest(requestId);
+            
             console.error('Stream response error:', error);
             message.error(`流式响应错误: ${error.message}`);
             flushSync(() => {
@@ -1567,8 +1929,14 @@ ${batchResults.map((result, index) => {
               ...prev,
               result: prev.result
             }));
-          }
+          },
+          controller // 传入外部AbortController
         );
+      } catch (error) {
+        // 请求异常，清理控制器
+        analysisRequestManager.current.completeRequest(requestId);
+        throw error; // 重新抛出错误，让外层catch处理
+      }
     } catch (error) {
       console.error('AI analysis failed:', error);
       message.error(`AI分析失败: ${error.message}`);
@@ -1697,6 +2065,9 @@ ${batchResults.map((result, index) => {
         'WIKI_TITLE': wikiTitle
       };
 
+      // 创建请求控制器
+      const { controller, requestId } = analysisRequestManager.current.createController('doc_analysis');
+
       // 构造请求配置对象
       const config = {
         url: '/api/llm/stream_analysis',
@@ -1715,46 +2086,59 @@ ${batchResults.map((result, index) => {
       };
 
       // 处理流式响应
-      await handleStreamResponse(
-        config,
-        (data) => {
-          // 处理纯文本数据块
-          if (data.text) {
-            setDocAnalysisState(prev => ({...prev, result: prev.result + data.text}));
-            return;
-          }
-          
-          // 处理区分后的推理内容和普通内容
-          if (data.type === 'reasoning') {
-            flushSync(() => {
-              setDocAnalysisState(prev => ({...prev, reasoningContent: prev.reasoningContent + data.content}));
-            });
-            return;
-          }
-          
-          if (data.type === 'content') {
-            flushSync(() => {
-              if (!docAnalysisState.isReasoningDone) {
-                setDocAnalysisState(prev => ({...prev, isReasoningDone: true}));
-              }
-              // 检查 content 是否为字符串，如果不是则转换为字符串
-              let content = typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
-              setDocAnalysisState(prev => ({...prev, result: prev.result + content}));
-            });
-            return;
-          }
-        },
-        () => {
-          setDocAnalysisState(prev => ({...prev, isLoading: false}));
-        },
-        (error) => {
-          throw error;
-        },
-        () => {
-          // 强制更新UI
-          setDocAnalysisState(prev => ({...prev, result: prev.result}));
-        }
-      );
+      try {
+        await handleStreamResponse(
+          config,
+          (data) => {
+            // 处理纯文本数据块
+            if (data.text) {
+              setDocAnalysisState(prev => ({...prev, result: prev.result + data.text}));
+              return;
+            }
+            
+            // 处理区分后的推理内容和普通内容
+            if (data.type === 'reasoning') {
+              flushSync(() => {
+                setDocAnalysisState(prev => ({...prev, reasoningContent: prev.reasoningContent + data.content}));
+              });
+              return;
+            }
+            
+            if (data.type === 'content') {
+              flushSync(() => {
+                if (!docAnalysisState.isReasoningDone) {
+                  setDocAnalysisState(prev => ({...prev, isReasoningDone: true}));
+                }
+                // 检查 content 是否为字符串，如果不是则转换为字符串
+                let content = typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
+                setDocAnalysisState(prev => ({...prev, result: prev.result + content}));
+              });
+              return;
+            }
+          },
+          () => {
+            // 请求完成，清理控制器
+            analysisRequestManager.current.completeRequest(requestId);
+            
+            setDocAnalysisState(prev => ({...prev, isLoading: false}));
+          },
+          (error) => {
+            // 请求失败，清理控制器
+            analysisRequestManager.current.completeRequest(requestId);
+            
+            throw error;
+          },
+          () => {
+            // 强制更新UI
+            setDocAnalysisState(prev => ({...prev, result: prev.result}));
+          },
+          controller // 传入外部AbortController
+        );
+      } catch (error) {
+        // 请求异常，清理控制器
+        analysisRequestManager.current.completeRequest(requestId);
+        throw error; // 重新抛出错误，让外层catch处理
+      }
     } catch (error) { 
       console.error('Doc AI analysis failed:', error);
       message.error(`文档 AI 分析失败: ${error.message}`);
@@ -1772,7 +2156,9 @@ ${batchResults.map((result, index) => {
     const validNodes = nodes.filter(node => node.node_token);
     return validNodes.map(node => {
       const suggestion = suggestions[node.node_token];
-      const title = suggestion ? <span className="suggestion-node">{node.title}</span> : node.title;
+      // 处理title为空的情况，显示"无标题"而不是空字符串
+      const nodeTitle = node.title || "无标题";
+      const title = suggestion ? <span className="suggestion-node">{nodeTitle}</span> : nodeTitle;
       const newNode = {
         title: title,
         key: node.node_token,
@@ -1788,27 +2174,54 @@ ${batchResults.map((result, index) => {
   // Load root nodes
   useEffect(() => {
     setLoading(true);
-    // Fetch root nodes (nodes without parent)
-    Promise.all([
-      apiClient.get(`/api/wiki/${spaceId}/nodes`, { params: { parent_node_token: undefined } }),
-      getSpaceName(spaceId)
-    ])
-      .then(([nodesResponse, spaceName]) => {
-        const items = nodesResponse.data.items;
-        const transformed = transformData(items, wikiAnalysisState.suggestions);
-        setTreeData(transformed);
-        setSpaceName(spaceName);
-        // Update page title
-        document.title = spaceName;
-      })
-      .catch(error => {
-        console.error('Error fetching root wiki nodes:', error);
-        message.error(`加载知识库节点失败: ${error.message}`);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  }, [spaceId, wikiAnalysisState.suggestions]);
+    
+    // 优先使用URL中的title参数
+    const titleFromUrl = searchParams.get('title');
+    
+    if (titleFromUrl && titleFromUrl.trim() !== '') {
+      // 如果URL中有title参数，直接使用它
+      const decodedTitle = decodeURIComponent(titleFromUrl);
+      setSpaceName(decodedTitle);
+      // 使用更安全的方式更新页面标题，避免图标闪烁
+      updatePageTitle(decodedTitle);
+      
+      // 只获取节点数据，不需要获取space name
+      apiClient.get(`/api/wiki/${spaceId}/nodes`, { params: { parent_node_token: undefined } })
+        .then(nodesResponse => {
+          const items = nodesResponse.data.items;
+          const transformed = transformData(items, wikiAnalysisState.suggestions);
+          setTreeData(transformed);
+        })
+        .catch(error => {
+          console.error('Error fetching root wiki nodes:', error);
+          message.error(`加载知识库节点失败: ${error.message}`);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    } else {
+      // 如果URL中没有title参数，使用原来的逻辑获取space name
+      Promise.all([
+        apiClient.get(`/api/wiki/${spaceId}/nodes`, { params: { parent_node_token: undefined } }),
+        getSpaceName(spaceId)
+      ])
+        .then(([nodesResponse, spaceName]) => {
+          const items = nodesResponse.data.items;
+          const transformed = transformData(items, wikiAnalysisState.suggestions);
+          setTreeData(transformed);
+          setSpaceName(spaceName);
+          // 使用更安全的方式更新页面标题，避免图标闪烁
+          updatePageTitle(spaceName);
+        })
+        .catch(error => {
+          console.error('Error fetching root wiki nodes:', error);
+          message.error(`加载知识库节点失败: ${error.message}`);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }
+  }, [spaceId, wikiAnalysisState.suggestions, searchParams]);
 
   // Load children nodes when a node is expanded
   const onLoadData = ({ key, children }) => {
@@ -2127,6 +2540,11 @@ ${batchResults.map((result, index) => {
         suggestions={wikiAnalysisState.suggestions}
         isFetchingFullNavigation={wikiAnalysisState.isFetchingFullNavigation}
         fullNavigationNodeCount={wikiAnalysisState.fullNavigationNodeCount}
+        isBatchProcessing={wikiAnalysisState.isBatchProcessing}
+        batchProgress={wikiAnalysisState.batchProgress.progress}
+        batchResults={wikiAnalysisState.batchResults}
+        currentBatchIndex={wikiAnalysisState.currentBatchIndex}
+        finalSummary={wikiAnalysisState.finalSummary}
         onAnalysis={startWikiAnalysis}
         onApplySuggestions={(newSuggestions) => {
           localStorage.setItem(`ai_suggestions_${spaceId}`, JSON.stringify(newSuggestions));
@@ -2148,6 +2566,18 @@ ${batchResults.map((result, index) => {
             hasAnalysis: false
           }));
           startWikiAnalysis();
+        }}
+        onExportToCloud={async () => {
+          try {
+            await exportAnalysisToCloudDocument({
+              result: wikiAnalysisState.result,
+              reasoningContent: wikiAnalysisState.reasoningContent,
+              finalSummary: wikiAnalysisState.finalSummary,
+              suggestions: wikiAnalysisState.suggestions
+            }, '知识库AI诊断');
+          } catch (error) {
+            console.error('导出知识库AI诊断结果失败:', error);
+          }
         }}
       />
       <DocAnalysisModal
@@ -2175,6 +2605,18 @@ ${batchResults.map((result, index) => {
           }));
           startDocAnalysis();
         }}
+        onExportToCloud={async () => {
+          try {
+            await exportAnalysisToCloudDocument({
+              result: docAnalysisState.result,
+              reasoningContent: docAnalysisState.reasoningContent,
+              finalSummary: '',
+              suggestions: []
+            }, '当前文档AI诊断');
+          } catch (error) {
+            console.error('导出当前文档AI诊断结果失败:', error);
+          }
+        }}
       />
       <DocImportAnalysisModal
         visible={docImportModalVisible}
@@ -2189,6 +2631,11 @@ ${batchResults.map((result, index) => {
         isReasoningDone={docImportAnalysisState.isReasoningDone}
         isFetchingFullNavigation={docImportAnalysisState.isFetchingFullNavigation}
         fullNavigationNodeCount={docImportAnalysisState.fullNavigationNodeCount}
+        isBatchProcessing={docImportAnalysisState.isBatchProcessing}
+        batchProgress={docImportAnalysisState.batchProgress.progress}
+        batchResults={docImportAnalysisState.batchResults}
+        currentBatchIndex={docImportAnalysisState.currentBatchIndex}
+        finalSummary={docImportAnalysisState.finalSummary}
         onRestartAnalysis={() => {
           // 重置状态并开始新的分析
           setDocImportAnalysisState(prev => ({
@@ -2200,6 +2647,18 @@ ${batchResults.map((result, index) => {
             hasAnalysis: false
           }));
           // 注意：文档导入分析需要用户重新选择文档，所以这里只是重置状态
+        }}
+        onExportToCloud={async () => {
+          try {
+            await exportAnalysisToCloudDocument({
+              result: docImportAnalysisState.result,
+              reasoningContent: docImportAnalysisState.reasoningContent,
+              finalSummary: docImportAnalysisState.finalSummary,
+              suggestions: docImportAnalysisState.suggestions
+            }, '文档导入AI评估');
+          } catch (error) {
+            console.error('导出文档导入AI评估结果失败:', error);
+          }
         }}
       />
     </div>

@@ -14,6 +14,7 @@ function App() {
       <div className="app-container">
         <Routes>
           <Route path="/" element={<Auth />} />
+          <Route path="/auth" element={<Auth />} />
           <Route path="/wiki" element={<Wiki />} />
           <Route path="/wiki/:spaceId" element={<WikiDetail />} />
           <Route path="/config" element={<Config />} />

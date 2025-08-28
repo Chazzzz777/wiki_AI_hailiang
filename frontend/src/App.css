@@ -1,9 +1,11 @@
 .app-container {
-  max-width: 1280px;
-  margin: 0 auto;
+  width: 100%; /* 确保容器宽度为全页面 */
+  max-width: none; /* 移除最大宽度限制 */
+  margin: 0; /* 移除自动边距 */
   padding: 24px;
   min-height: 100vh;
   animation: fadeIn 0.8s ease-out;
+  box-sizing: border-box; /* 确保padding不会导致溢出 */
 }
 
 /* 页面切换动画 */

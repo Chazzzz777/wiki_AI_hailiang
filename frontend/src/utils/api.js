@@ -1,8 +1,6 @@
 import axios from 'axios';
 
-const apiClient = axios.create({
-  baseURL: `http://localhost:${process.env.REACT_APP_BACKEND_PORT || 5001}`,
-});
+const apiClient = axios.create({});
 
 // 重试机制的请求函数
 const requestWithRetry = async (requestFn, maxRetries = 3, retryDelay = 1000) => {
@@ -53,7 +51,8 @@ apiClient.interceptors.response.use(
   async error => {
     if (error.response && error.response.status === 401) {
       localStorage.removeItem('user_access_token');
-      window.location.href = '/';
+      // 重定向到认证页面以重新发起授权流程
+      window.location.href = '/auth';
     }
     return Promise.reject(error);
   }

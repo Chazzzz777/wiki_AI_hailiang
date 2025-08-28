@@ -9,7 +9,7 @@ const { Text } = Typography;
 
 
 
-const AiAnalysisModal = ({ visible, onClose, analysisResult, reasoningContent, isReasoningDone, loading, suggestions, onAnalysis, onRestartAnalysis, isFetchingFullNavigation, fullNavigationNodeCount, isBatchProcessing, batchProgress, batchResults, currentBatchIndex, finalSummary }) => {
+const AiAnalysisModal = ({ visible, onClose, analysisResult, reasoningContent, isReasoningDone, loading, suggestions, onAnalysis, onRestartAnalysis, isFetchingFullNavigation, fullNavigationNodeCount, isBatchProcessing, batchProgress, batchResults, currentBatchIndex, finalSummary, onExportToCloud }) => {
   const [showReasoning, setShowReasoning] = useState(false);
   const reasoningRef = useRef(null);
 
@@ -133,6 +133,9 @@ const AiAnalysisModal = ({ visible, onClose, analysisResult, reasoningContent, i
   // 判断是否显示重新分析按钮
   const shouldShowRestartButton = !loading && !isBatchProcessing && (analysisResult || reasoningContent || finalSummary) && onRestartAnalysis;
   
+  // 判断是否显示导出按钮
+  const shouldShowExportButton = !loading && !isBatchProcessing && (analysisResult || finalSummary) && onExportToCloud;
+  
   // 渲染模态窗底部按钮
   const renderFooter = () => {
     if (shouldShowStartButton) {
@@ -148,17 +151,37 @@ const AiAnalysisModal = ({ visible, onClose, analysisResult, reasoningContent, i
       ];
     }
     
-    if (shouldShowRestartButton) {
-      return [
-        <Button 
-          key="restart" 
-          className="gradient-purple-btn"
-          onClick={onRestartAnalysis}
-          disabled={loading}
-        >
-          重新分析
-        </Button>
-      ];
+    if (shouldShowRestartButton || shouldShowExportButton) {
+      const buttons = [];
+      
+      if (shouldShowRestartButton) {
+        buttons.push(
+          <Button 
+            key="restart" 
+            className="gradient-purple-btn"
+            onClick={onRestartAnalysis}
+            disabled={loading}
+          >
+            重新分析
+          </Button>
+        );
+      }
+      
+      if (shouldShowExportButton) {
+        buttons.push(
+          <Button 
+            key="export" 
+            type="primary"
+            onClick={onExportToCloud}
+            disabled={loading}
+            style={{ marginLeft: '8px' }}
+          >
+            导出到云文档
+          </Button>
+        );
+      }
+      
+      return buttons;
     }
     
     // 默认情况下不显示任何按钮，使用右上角的叉号关闭

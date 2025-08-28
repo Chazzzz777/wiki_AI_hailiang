@@ -115,7 +115,7 @@ function Config() {
   
   // 从localStorage加载配置
   useEffect(() => {
-    const savedApiKey = localStorage.getItem('llm_api_key') || '';
+    const savedApiKey = localStorage.getItem('llm_api_key') || '84f26dd9-c3ae-4386-afd0-e370de343b8b';
     const savedModel = localStorage.getItem('llm_model') || 'doubao-seed-1-6-thinking-250615';
     const savedMaxTokens = localStorage.getItem('llm_max_tokens') || '4096';
     const savedPrompts = {
@@ -151,7 +151,7 @@ function Config() {
   // 重置为默认配置
   const handleReset = () => {
     form.setFieldsValue({
-      apiKey: '',
+      apiKey: '84f26dd9-c3ae-4386-afd0-e370de343b8b',
       model: 'doubao-seed-1-6-thinking-250615',
       maxTokens: '4096',
       wikiAnalysis: DEFAULT_PROMPTS.wikiAnalysis,

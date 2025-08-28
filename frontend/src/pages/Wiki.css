@@ -116,26 +116,34 @@
 }
 
 .wiki-content {
-  padding: 20px 0 0 0; /* 增加卡片列表顶部间距 */
+  padding: 20px 48px 0 48px; /* 增加左右边距为48px，保持顶部边距 */
   animation: fadeIn 0.8s ease-out;
+  width: 100%; /* 确保容器宽度为全页面 */
+  max-width: none; /* 移除最大宽度限制 */
+  box-sizing: border-box; /* 确保padding不会导致溢出 */
+  overflow: visible; /* 确保hover阴影不被裁剪 */
 }
 
-.scrollable-container {
-  height: calc(100vh - 160px); /* 根据实际布局调整 */
-  overflow: auto;
-  padding: 64px; /* 进一步增加内边距到64px，确保hover阴影不被遮挡 */
-  /* 去掉宽度限制，让内容充分利用屏幕空间 */
-  max-width: none;
-  width: 100%;
+.wiki-list {
+  width: 100%; /* 确保列表宽度为全页面 */
+  max-width: none; /* 移除最大宽度限制 */
+  overflow: visible; /* 确保hover阴影不被裁剪 */
+}
+
+.wiki-list .ant-list {
+  width: 100%; /* 确保Ant Design列表宽度为全页面 */
+  max-width: none; /* 移除最大宽度限制 */
+  overflow: visible; /* 确保hover阴影不被裁剪 */
 }
 
 .wiki-list .ant-list-item {
   padding: 0 !important; /* 移除内边距 */
   border: none !important; /* 移除边框 */
   background-color: transparent !important; /* 移除背景色 */
-  margin-bottom: 24px; /* 增加列表项间距，为hover放大提供更多空间 */
+  margin: 16px 32px 24px 32px; /* 为顶部添加16px边距，左右添加32px边距，为阴影提供充足空间 */
   animation: fadeInUp 0.5s ease-out;
   animation-fill-mode: both;
+  overflow: visible !important; /* 确保阴影不被裁剪 */
 }
 
 .wiki-list .ant-list-item:hover {
@@ -177,7 +185,7 @@
   cursor: pointer;
   will-change: transform, box-shadow;
   transform-origin: center center; /* 确保从中心点放大 */
-  margin: 8px; /* 增加卡片外边距，为hover放大提供更多空间 */
+  margin: 0; /* 移除卡片外边距，由列表项提供边距空间 */
 }
 
 /* 竖向卡片特殊样式 - 渐变背景 */
@@ -763,8 +771,9 @@
 
 @media (max-width: 768px) {
   .wiki-title-section {
-    padding: 48px 16px 32px 16px; /* 移动端适配 */
-    margin-bottom: 32px;
+    background: transparent; /* 确保背景透明 */
+    padding: 48px 0 24px 0;
+    margin: 0 48px; /* 统一边距 */
   }
 
   .wiki-title-container {
@@ -878,5 +887,291 @@
   
   .wiki-card-cover {
     height: 15px; /* 从35px减少到15px，保持一致性 */
+  }
+}
+
+/* 搜索相关样式 */
+.wiki-search-section {
+  padding: 16px 0 24px 0;
+  background: transparent;
+  margin: 0 48px;
+  position: relative;
+}
+
+.wiki-search-container {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  margin: 0;
+  max-width: 600px;
+  position: relative;
+}
+
+/* 搜索框容器统一样式 */
+.wiki-search-container .ant-input-affix-wrapper {
+  border-radius: 16px !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04)) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  height: 48px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1) !important;
+  padding: 0 18px !important;
+  display: flex;
+  align-items: center;
+}
+
+/* 聚焦状态 */
+.wiki-search-container .ant-input-affix-wrapper:focus-within {
+  border-color: rgba(255, 255, 255, 0.25) !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.06)) !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+  transform: translateY(-2px);
+}
+
+/* 输入框本身透明化 */
+.wiki-search-container .ant-input {
+  background: transparent !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+  font-size: 15px !important;
+  height: 100% !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+}
+
+/* 占位符样式 */
+.wiki-search-container .ant-input::placeholder {
+  color: rgba(255, 255, 255, 0.5) !important;
+  font-weight: 400;
+}
+
+/* 搜索图标样式 */
+.wiki-search-container .ant-input-prefix {
+  color: rgba(255, 255, 255, 0.7) !important;
+  font-size: 18px !important;
+  margin-right: 10px;
+  position: static;
+  transform: none;
+}
+
+.wiki-search-container .ant-input-affix-wrapper:focus-within .ant-input-prefix {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* 清除按钮样式 */
+.wiki-search-container .ant-input-suffix {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.wiki-search-container .ant-input-affix-wrapper:focus-within .ant-input-suffix {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+  /* 搜索结果模态框 - 与整体UI风格协调 */
+  .wiki-search-modal .ant-modal-content {
+    border-radius: 16px;
+    overflow: hidden;
+    background: rgba(42, 45, 49, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+  }
+
+  .wiki-search-modal .ant-modal-header {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    background: transparent;
+    padding: 20px 24px;
+  }
+
+  .wiki-search-modal .ant-modal-title {
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 18px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  }
+
+  .wiki-search-modal .ant-modal-close {
+    color: rgba(255, 255, 255, 0.6);
+    transition: all 0.3s ease;
+  }
+
+  .wiki-search-modal .ant-modal-close:hover {
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .wiki-search-modal .ant-modal-body {
+    padding: 0 24px 24px 24px;
+    background: transparent;
+  }
+
+  .wiki-search-results {
+    min-height: 200px;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  .wiki-search-results-container {
+    max-height: 500px;
+    overflow-y: auto;
+    padding-right: 8px;
+  }
+
+  .wiki-search-results-container::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .wiki-search-results-container::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+  }
+
+  .wiki-search-results-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+  }
+
+  .wiki-search-results-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+
+  .wiki-search-result-card {
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(42, 45, 49, 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+
+  .wiki-search-result-card:hover {
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(42, 45, 49, 0.8);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+  }
+
+  .wiki-search-result-content {
+    padding: 16px 20px;
+  }
+
+  .wiki-search-result-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 8px;
+    line-height: 1.4;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  }
+
+  .wiki-search-result-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .wiki-search-result-space {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.08);
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-weight: 500;
+  }
+
+  .wiki-search-result-type {
+    font-size: 12px;
+    color: rgba(120, 80, 180, 0.9);
+    background: rgba(120, 80, 180, 0.15);
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-weight: 500;
+  }
+
+  .wiki-search-result-description {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.5;
+    margin-top: 8px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* 空状态样式 */
+  .wiki-search-results .ant-empty {
+    padding: 60px 0;
+  }
+
+  .wiki-search-results .ant-empty-description {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 14px;
+    font-weight: 400;
+  }
+
+  /* 加载状态样式 */
+  .wiki-search-results .ant-spin {
+    padding: 40px 0;
+  }
+
+  .wiki-search-results .ant-spin-text {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 14px;
+    margin-top: 12px;
+  }
+
+/* 空状态样式 */
+.wiki-search-results .ant-empty {
+  padding: 40px 0;
+}
+
+.wiki-search-results .ant-empty-description {
+  color: #999;
+  font-size: 14px;
+}
+
+/* 加载状态样式 */
+.wiki-search-results .ant-spin {
+  padding: 20px 0;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .wiki-search-section {
+    padding: 16px 24px 12px 24px;
+    margin: 0;
+  }
+  
+  .wiki-search-container {
+    flex-direction: column;
+    align-items: stretch;
+    margin: 0;
+    max-width: none;
+  }
+  
+  .wiki-search-container .ant-input {
+    width: 100% !important;
+    max-width: none !important;
+  }
+  
+  .wiki-search-modal {
+    width: 90% !important;
+    margin: 0 auto;
+  }
+  
+  .wiki-search-result-meta {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
   }
 }

@@ -5,7 +5,7 @@ import './docanalysismodal.css';
 
 const { Panel } = Collapse;
 
-const DocImportAnalysisModal = ({ visible, onClose, onAnalysis, loading, analysisResult, reasoningContent, isReasoningDone, isFetchingFullNavigation, fullNavigationNodeCount, isBatchProcessing, batchProgress, batchResults, currentBatchIndex, finalSummary }) => {
+const DocImportAnalysisModal = ({ visible, onClose, onAnalysis, loading, analysisResult, reasoningContent, isReasoningDone, isFetchingFullNavigation, fullNavigationNodeCount, isBatchProcessing, batchProgress, batchResults, currentBatchIndex, finalSummary, onExportToCloud }) => {
   const [docUrl, setDocUrl] = useState('');
   const reasoningRef = useRef(null);
 
@@ -153,12 +153,34 @@ const DocImportAnalysisModal = ({ visible, onClose, onAnalysis, loading, analysi
     );
   };
 
+  // 判断是否显示导出按钮
+  const shouldShowExportButton = !loading && !isBatchProcessing && (analysisResult || finalSummary) && onExportToCloud;
+  
+  // 渲染模态窗底部按钮
+  const renderFooter = () => {
+    if (shouldShowExportButton) {
+      return [
+        <Button 
+          key="export" 
+          type="primary"
+          onClick={onExportToCloud}
+          disabled={loading}
+        >
+          导出到云文档
+        </Button>
+      ];
+    }
+    
+    // 默认情况下不显示任何按钮
+    return null;
+  };
+
   return (
     <Modal
       title="文档导入 AI 评估"
       visible={visible}
       onCancel={onClose}
-      footer={null}
+      footer={renderFooter()}
       width={800}
       className="doc-analysis-modal"
     >
