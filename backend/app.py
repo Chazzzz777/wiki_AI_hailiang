@@ -16,15 +16,15 @@ from openai import OpenAI
 load_dotenv() # Load environment variables from .env file
 
 # --- Environment Variables ---
-FRONTEND_PORT = os.getenv('REACT_APP_FRONTEND_PORT', 3005)
-BACKEND_PORT = os.getenv('BACKEND_PORT', 5005)
+FRONTEND_PORT = os.getenv('REACT_APP_FRONTEND_PORT', 3001)
+BACKEND_PORT = os.getenv('BACKEND_PORT', 5001)
 FEISHU_APP_ID = os.getenv('FEISHU_APP_ID')
 FEISHU_APP_SECRET = os.getenv('FEISHU_APP_SECRET')
 
 app = Flask(__name__)
 # 获取主机名环境变量，默认为localhost
 HOSTNAME = os.getenv('HOSTNAME', 'localhost')
-CORS(app, resources={r"/api/*": {"origins": [f"http://localhost:{FRONTEND_PORT}", f"http://{HOSTNAME}:{FRONTEND_PORT}", "http://115.190.84.247:3005"], "supports_credentials": True}})
+CORS(app, resources={r"/api/*": {"origins": [f"http://localhost:{FRONTEND_PORT}", f"http://{HOSTNAME}:{FRONTEND_PORT}", "http://localhost:3001"], "supports_credentials": True}})
 
 # --- Logging Configuration ---
 import os

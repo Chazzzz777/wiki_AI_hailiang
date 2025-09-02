@@ -14,7 +14,7 @@ if [ -f "$SCRIPT_DIR/frontend/.env" ]; then
 fi
 
 # Use environment variables or default values
-FRONTEND_PORT=${REACT_APP_FRONTEND_PORT:-3000}
+FRONTEND_PORT=${REACT_APP_FRONTEND_PORT:-3001}
 BACKEND_PORT=${BACKEND_PORT:-5001}
 
 # 清理前端和后端可能占用的端口
