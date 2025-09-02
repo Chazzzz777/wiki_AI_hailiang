@@ -338,5 +338,5 @@ cd .. && ./start.sh
     - 确认后端服务已在 `http://localhost:5001` (或您配置的端口) 正常运行。
     - 检查浏览器开发者工具的网络请求，看是否有跨域或其他网络错误。
 - **LLM 请求失败**:
-    - 检查您的 `OPENAI_API_KEY` 是否正确。
+    - 检查您的 `REACT_APP_LLM_API_KEY` 是否正确。
     - 检查后端日志 (`backend/logs/app.log`)，查看从 LLM 服务返回的具体错误信息。
