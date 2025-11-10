@@ -1133,10 +1133,12 @@ def get_user_access_token(code, redirect_uri):
             error_msg = data.get("msg", "Unknown error")
             app.logger.error(f"Failed to get user_access_token from feishu: {error_msg} (code: {data.get('code')})")
             return None
-            
-        access_token = data.get("access_token")
+
+        token_container = data.get("data") or data
+        access_token = token_container.get("access_token")
         if not access_token:
-            app.logger.error("No access_token in feishu response")
+            safe_container = {k: ('***' if 'token' in k else v) for k, v in token_container.items()}
+            app.logger.error(f"No access_token in feishu response payload: {safe_container}")
             return None
             
         app.logger.info("Successfully obtained user_access_token from feishu")
